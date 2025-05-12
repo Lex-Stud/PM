@@ -1,0 +1,282 @@
+#include <LiquidCrystal.h>
+
+// Configurare LCD: pinii (RS, E, D4, D5, D6, D7)
+LiquidCrystal lcd(7, 6, 5, 4, 3, 2);
+
+// Definire pini pentru senzori și butoane
+const int buzzerPin = 8; // Pinul 8 pentru buzzer
+const int fotosenzorPin = A3; // Pinul A3 pentru fotosenzor
+const int potentiometruPin = A0; // Pinul A0 pentru potențiometru
+const int buton1Pin = A1; // Pinul A1 pentru primul buton (și START)
+const int buton2Pin = A2; // Pinul A2 pentru al doilea buton
+
+// Definire Pini Registru Deplasare (pentru afișaj 7 segmente)
+const int latchPin = 10; // Pinul STCP (Latch) al registrului
+const int clockPin = 9; // Pinul SHCP (Clock) al registrului
+const int dataPin = 11; // Pinul DS (Data) al registrului
+
+// Pattern-uri pentru afișajul cu 7 segmente (din codul tău)
+// Presupunând că ordinea biților este ABCDEFGP (MSB la LSB) și shiftOut folosește LSBFIRST
+// Q0(74HC595)->DP, Q1->G, Q2->F, Q3->E, Q4->D, Q5->C, Q6->B, Q7->A
+byte digits[] = {
+0b11111100, // 0 (a,b,c,d,e,f ON, g OFF, dp OFF based on typical segment layout)
+// User provided: 0b11111010 -> a,b,c,d,e,g ON, f OFF, dp OFF. Voi folosi aceasta.
+// Folosesc exact array-ul furnizat de tine:
+0b11111010, // 0 - segmentele a,b,c,d,e,g aprinse (f stins)
+0b01100000, // 1 - segmentele b,c aprinse
+0b11011100, // 2
+0b11110100, // 3
+0b01100110, // 4
+0b10110110, // 5
+0b10111110, // 6
+0b11100000, // 7
+0b11111110, // 8 - toate segmentele aprinse (a-g)
+0b11100110 // 9
+};
+
+// Stări Joc
+enum GameState {
+IDLE,
+WAITING_FOR_ACTION,
+ACTION_IN_PROGRESS,
+ROUND_LOST
+};
+GameState currentGameState = IDLE;
+
+// Variabile Joc
+int score = 0;
+int currentActionID = 0;
+unsigned long actionStartTime = 0;
+int timeLimitSeconds = 5; // Timpul inițial în secunde
+const int minTimeLimitSeconds = 2;
+const int maxTimeLimitSeconds = 5;
+
+// Acțiuni Posibile
+enum PlayerAction {
+PRESS_BUTTON_1,
+PRESS_BUTTON_2,
+COVER_PHOTORESISTOR,
+TURN_POTENTIOMETER,
+NUM_ACTIONS // Numărul total de acțiuni, pentru generare aleatorie
+};
+String actionDescriptions[] = {
+"Apasa Buton 1!",
+"Apasa Buton 2!",
+"Acopera Senzor!",
+"Roteste Pot.!"
+};
+
+// Praguri pentru senzori (necesită calibrare)
+const int FOTOSENSOR_THRESHOLD_COVERED = 300; // Valoare mai MICĂ când e acoperit
+const int POTENTIOMETER_THRESHOLD_HIGH = 700; // Valoare PESTE acest prag
+
+// Timp debounce butoane
+const unsigned long DEBOUNCE_DELAY = 50; // ms
+
+// ------ Funcții pentru Afișajul cu 7 Segmente (din codul tău) ------
+// Funcție pentru ștergerea afișajului (toate segmentele stinse)
+void clearDisplaySevenSegment() { // Redenumit pentru a evita confuzia cu lcd.clear()
+setDisplay(0b00000000);
+}
+
+byte getDigit(int i, bool period = false) {
+if (i >= 0 && i < 10) {
+if (period == false) {
+return digits[i]; // Returnează cifra fără punct
+} else {
+// Presupunând că bitul LSB (cel mai din dreapta) este pentru punct
+// period = true (1) => digits[i] | 0b00000001
+return digits[i] | 0b00000001;
+}
+}
+return 0b00000000; // În caz de eroare sau număr invalid, returnează blank
+}
+
+// code: byte-ul care controlează segmentele
+void setDisplay(byte code) {
+digitalWrite(latchPin, LOW);
+shiftOut(dataPin, clockPin, LSBFIRST, code); // Folosind LSBFIRST cum era în codul tău
+digitalWrite(latchPin, HIGH);
+}
+// ------ Sfârșit Funcții Afișaj 7 Segmente ------
+
+void setup() {
+Serial.begin(9600); // Pentru debugging
+
+lcd.begin(16, 2);
+lcd.print("Joc Actiune!");
+lcd.setCursor(0, 1);
+lcd.print("Apasa B1 Start");
+
+pinMode(buzzerPin, OUTPUT);
+pinMode(fotosenzorPin, INPUT); // Implicit INPUT, dar e bine să fie explicit
+pinMode(potentiometruPin, INPUT); // Implicit INPUT
+
+pinMode(buton1Pin, INPUT_PULLUP);
+pinMode(buton2Pin, INPUT_PULLUP);
+
+pinMode(latchPin, OUTPUT);
+pinMode(clockPin, OUTPUT);
+pinMode(dataPin, OUTPUT);
+
+clearDisplaySevenSegment(); // Inițializare afișaj 7 segmente (stins)
+
+randomSeed(analogRead(A4)); // Seed pentru generatorul de numere aleatorii (pin nefolosit, ex: A4, A5)
+}
+
+void loop() {
+switch (currentGameState) {
+case IDLE:
+handleIdleState();
+break;
+case WAITING_FOR_ACTION:
+handleWaitingForActionState();
+break;
+case ACTION_IN_PROGRESS:
+handleActionInProgressState();
+break;
+case ROUND_LOST:
+handleRoundLostState();
+break;
+}
+}
+
+void handleIdleState() {
+if (isButtonPressed(buton1Pin)) {
+score = 0;
+timeLimitSeconds = maxTimeLimitSeconds;
+lcd.clear();
+lcd.print("Pregatire...");
+clearDisplaySevenSegment(); // Asigură-te că e stins
+delay(1000);
+currentGameState = WAITING_FOR_ACTION;
+}
+}
+
+void handleWaitingForActionState() {
+currentActionID = random(0, NUM_ACTIONS);
+
+lcd.clear();
+lcd.setCursor(0, 0);
+lcd.print(actionDescriptions[currentActionID]);
+lcd.setCursor(0, 1);
+lcd.print("Scor: ");
+lcd.print(score);
+
+// Afișează timpul inițial pentru acțiune pe 7 segmente
+setDisplay(getDigit(timeLimitSeconds));
+
+actionStartTime = millis();
+currentGameState = ACTION_IN_PROGRESS;
+}
+
+void handleActionInProgressState() {
+unsigned long currentTime = millis();
+unsigned long elapsedTime = currentTime - actionStartTime;
+int remainingTimeSeconds = timeLimitSeconds - (elapsedTime / 1000);
+
+if (remainingTimeSeconds >= 0) {
+setDisplay(getDigit(remainingTimeSeconds));
+} else {
+setDisplay(getDigit(0)); // Timpul a expirat, arată 0
+}
+
+if (elapsedTime >= (unsigned long)timeLimitSeconds * 1000) {
+currentGameState = ROUND_LOST;
+return;
+}
+
+bool actionCompleted = false;
+switch (currentActionID) {
+case PRESS_BUTTON_1:
+if (isButtonPressed(buton1Pin)) actionCompleted = true;
+break;
+case PRESS_BUTTON_2:
+if (isButtonPressed(buton2Pin)) actionCompleted = true;
+break;
+case COVER_PHOTORESISTOR:
+if (analogRead(fotosenzorPin) < FOTOSENSOR_THRESHOLD_COVERED) actionCompleted = true;
+break;
+case TURN_POTENTIOMETER:
+if (analogRead(potentiometruPin) > POTENTIOMETER_THRESHOLD_HIGH) actionCompleted = true;
+break;
+}
+
+if (actionCompleted) {
+score++;
+lcd.setCursor(8, 1); // După "Scor: X"
+lcd.print(" OK!");
+
+// Ajustează timeLimitSeconds
+if (score > 0 && score % 3 == 0) { // La fiecare 3 puncte
+    if (timeLimitSeconds > minTimeLimitSeconds) {
+        timeLimitSeconds--;
+    }
+}
+// Asigură-te că nu scade sub minim chiar dacă logica e complexă
+if (timeLimitSeconds < minTimeLimitSeconds) timeLimitSeconds = minTimeLimitSeconds;
+
+
+delay(600); // Pauză scurtă pentru a vedea "OK!" și scorul actualizat
+currentGameState = WAITING_FOR_ACTION;
+
+
+}
+}
+
+void handleRoundLostState() {
+lcd.clear();
+lcd.setCursor(0, 0);
+lcd.print("Runda Pierduta!");
+lcd.setCursor(0, 1);
+lcd.print("Scor Final: ");
+lcd.print(score);
+
+clearDisplaySevenSegment(); // Stinge afișajul 7 segmente
+
+tone(buzzerPin, 250, 500);
+delay(500);
+// noTone(buzzerPin); // tone() cu durată se oprește singur
+tone(buzzerPin, 200, 500);
+delay(1500); // Așteaptă puțin înainte de a reveni la IDLE
+
+currentGameState = IDLE;
+lcd.clear();
+lcd.print("Joc Actiune!");
+lcd.setCursor(0, 1);
+lcd.print("Apasa B1 Start");
+}
+
+// Funcție simplă de debounce și citire buton
+bool isButtonPressed(int buttonPin) {
+static unsigned long lastDebounceTime[2] = {0, 0};
+static bool lastButtonState[2] = {HIGH, HIGH}; // HIGH = neapăsat cu PULLUP
+static bool currentButtonStableState[2] = {HIGH, HIGH};
+static bool buttonPressedEvent[2] = {false, false}; // Pentru a detecta o singură apăsare
+
+int buttonIndex = (buttonPin == buton1Pin) ? 0 : 1;
+bool eventDetected = false;
+
+bool reading = digitalRead(buttonPin);
+
+if (reading != lastButtonState[buttonIndex]) {
+lastDebounceTime[buttonIndex] = millis();
+}
+
+if ((millis() - lastDebounceTime[buttonIndex]) > DEBOUNCE_DELAY) {
+if (reading != currentButtonStableState[buttonIndex]) {
+currentButtonStableState[buttonIndex] = reading;
+if (currentButtonStableState[buttonIndex] == LOW) { // Buton apăsat (LOW cu PULLUP)
+buttonPressedEvent[buttonIndex] = true; // Marchez evenimentul
+}
+}
+}
+lastButtonState[buttonIndex] = reading;
+
+// Consumă evenimentul de apăsare
+if (buttonPressedEvent[buttonIndex]) {
+buttonPressedEvent[buttonIndex] = false; // Resetează pentru următoarea apăsare distinctă
+eventDetected = true;
+}
+return eventDetected;
+}
