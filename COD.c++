@@ -51,7 +51,7 @@ String actions[] = {
 int score = 0, currentAction = 0;
 unsigned long startTime = 0;
 bool isQuickMode = false, potPassed = false;
-unsigned long quickModeStartTime = 0; // Timpul pentru întregul mod rapid
+unsigned long quickModeStartTime = 0; // Timpul pentru modul rapid
 
 const int TIME_LIMIT = 5000,
     QUICK_TIME = 10000;
@@ -175,7 +175,7 @@ void newAction() {
     lcd.print("Scor: ");
     lcd.print(score);
 
-    // In modul normal resetează timpul
+    // In modul normal -> resetează timpul
     if (!isQuickMode) {
         startTime = millis();
     }
