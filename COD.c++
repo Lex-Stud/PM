@@ -14,6 +14,7 @@ const int buzzerPin = 8,
 const int latchPin = 10,
     clockPin = 9,
     dataPin = 11;
+const int led1Pin = 3, led2Pin = 4;
 
 // Pattern-uri 7-segmente
 byte digits[] = {
@@ -184,13 +185,22 @@ void newAction() {
     Serial.print(actions[currentAction]);
 }
 
-void playIdleMelody() {
+void animation() {
     int melody[] = { 523, 659, 784, 659, 523, 784, 659, 523, 392, 440, 392, 330, 440, 392, 330, 262 };
-  int duration[] = { 120, 120, 120, 120, 200, 200, 120, 120, 120, 200, 120, 120, 200, 120, 120, 200 };
+    int duration[] = { 120, 120, 120, 120, 200, 200, 120, 120, 120, 200, 120, 120, 200, 120, 120, 200 };
     for (int i = 0; i < 16; i++) {
+        if (i % 2 == 0) {
+            digitalWrite(led1Pin, HIGH);
+            digitalWrite(led2Pin, LOW);
+        } else {
+            digitalWrite(led1Pin, LOW);
+            digitalWrite(led2Pin, HIGH);
+        }
         tone(buzzerPin, melody[i], duration[i]);
         delay(duration[i] + 30);
     }
+    digitalWrite(led1Pin, LOW);
+    digitalWrite(led2Pin, LOW);
 }
 
 
@@ -209,6 +219,8 @@ void setup() {
     pinMode(latchPin, OUTPUT);
     pinMode(clockPin, OUTPUT);
     pinMode(dataPin, OUTPUT);
+    pinMode(led1Pin, OUTPUT);
+    pinMode(led2Pin, OUTPUT);
 
     setDisplay(0);
     randomSeed(analogRead(A4));
@@ -233,7 +245,7 @@ void loop() {
     switch (state) {
     case IDLE:
         if (millis() - lastIdleMelody > 15000) {  // Redă melodia la 15 s
-            playIdleMelody();
+            animation();
             lastIdleMelody = millis();
         }
 
