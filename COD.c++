@@ -184,6 +184,15 @@ void newAction() {
     Serial.print(actions[currentAction]);
 }
 
+void playIdleMelody() {
+    int melody[] = { 523, 659, 784, 659, 523, 784, 659, 523, 392, 440, 392, 330, 440, 392, 330, 262 };
+  int duration[] = { 120, 120, 120, 120, 200, 200, 120, 120, 120, 200, 120, 120, 200, 120, 120, 200 };
+    for (int i = 0; i < 16; i++) {
+        tone(buzzerPin, melody[i], duration[i]);
+        delay(duration[i] + 30);
+    }
+}
+
 
 //---------------------------------------------------------------Main---------------------------------------------------------------
 void setup() {
@@ -219,8 +228,15 @@ void loop() {
         remaining = (TIME_LIMIT - elapsed) / 1000;
     }
 
+    static unsigned long lastIdleMelody = 0;
+
     switch (state) {
     case IDLE:
+        if (millis() - lastIdleMelody > 15000) {  // Redă melodia la 15 s
+            playIdleMelody();
+            lastIdleMelody = millis();
+        }
+
         if (buttonPressed(btn1Pin)) {
             score = 0;
             isQuickMode = false;
