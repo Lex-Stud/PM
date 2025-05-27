@@ -185,10 +185,25 @@ void newAction() {
     Serial.print(actions[currentAction]);
 }
 
+// Functie de animatie pentru atunci cand jocul e in stare IDLE
 void animation() {
     int melody[] = { 523, 659, 784, 659, 523, 784, 659, 523, 392, 440, 392, 330, 440, 392, 330, 262 };
     int duration[] = { 120, 120, 120, 120, 200, 200, 120, 120, 120, 200, 120, 120, 200, 120, 120, 200 };
+    byte anim_7Segmen[] = {0b00000010, 0b00001000, 0b00010000, 0b00100000, 0b01000000, 0b10000000, 0b00000010, 0b11111110};
+    int animLen = sizeof(anim_7Segmen) / sizeof(anim_7Segmen[0]);
     for (int i = 0; i < 16; i++) {
+        lcd.clear();
+        lcd.print(actions[i % NUM_ACTIONS]);
+        lcd.setCursor(0, 1);
+        lcd.print("Animatie: ");
+        lcd.print(i + 1);
+
+        if (i < animLen) {
+            setDisplay(anim_7Segmen[i]);
+        } else {
+            setDisplay(digits[i % 10]);
+        }
+
         if (i % 2 == 0) {
             digitalWrite(led1Pin, HIGH);
             digitalWrite(led2Pin, LOW);
@@ -201,6 +216,7 @@ void animation() {
     }
     digitalWrite(led1Pin, LOW);
     digitalWrite(led2Pin, LOW);
+    setDisplay(0);
 }
 
 
