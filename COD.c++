@@ -246,14 +246,14 @@ void setup() {
 }
 
 void loop() {
-    unsigned long elapsed, remaining;
+    unsigned long pased, remaining;
 
     if (isQuickMode) {
-        elapsed = millis() - quickModeStartTime;
-        remaining = (QUICK_TIME - elapsed) / 1000;
+        pased = millis() - quickModeStartTime;
+        remaining = (QUICK_TIME - pased) / 1000;
     } else {
-        elapsed = millis() - startTime;
-        remaining = (TIME_LIMIT - elapsed) / 1000;
+        pased = millis() - startTime;
+        remaining = (TIME_LIMIT - pased) / 1000;
     }
 
     static unsigned long lastIdleMelody = 0;
@@ -286,10 +286,10 @@ void loop() {
 
         // Verifică dacă timpul a expirat
         bool timeExpired = false;
-        if (isQuickMode && elapsed >= QUICK_TIME) {
+        if (isQuickMode && pased >= QUICK_TIME) {
             timeExpired = true;
         }
-        if (!isQuickMode && elapsed >= TIME_LIMIT) {
+        if (!isQuickMode && pased >= TIME_LIMIT) {
             timeExpired = true;
         }
         
