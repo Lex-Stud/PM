@@ -256,13 +256,13 @@ void loop() {
         remaining = (TIME_LIMIT - pased) / 1000;
     }
 
-    static unsigned long lastIdleMelody = 0;
+    static unsigned long timeAnimation = 0;
 
     switch (state) {
     case IDLE:
-        if (millis() - lastIdleMelody > 15000) {  // Redă melodia la 15 s
+        if (millis() - timeAnimation > 15000) {  // Redă melodia la 15 s
             animation();
-            lastIdleMelody = millis();
+            timeAnimation = millis();
         }
 
         if (buttonPressed(btn1Pin)) {
